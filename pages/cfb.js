@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import Link from "next/link";
 import { buildTeamMap, calcSpread, getEdge, getCFBRec, getSpreadPenalty, getAdjustedEdge, parseFPICSV, parseDKCSV } from "../lib/engine";
 import { S, btn } from "../lib/components";
+import { callClaude, extractText, extractJSON, fetchWithSearch } from "../lib/fetcher";
 
 // ─── DEFAULT NCAAF DATA (2026 ESPN FPI preseason) ─────────────────────────────
 const DEFAULT_FPI = [
@@ -278,40 +279,23 @@ export default function CFBEdge() {
   const fetchFPI = useCallback(async () => {
     setFpiStatus("loading");
     const today = new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"});
-    const prompt = `Today is ${today}. Search the web for the current ESPN College Football FPI rankings for the 2026 season. Check espn.com/college-football/fpi and sports news sites.
 
-Return ONLY a valid JSON array of the top 40 FBS teams by FPI rank. Each object must have exactly:
-- rank: integer
-- name: full team name
-- abbr: short abbreviation (2-5 chars, e.g. OSU, TEX, UGA, ND, ORE)
-- fpiPts: the actual ESPN FPI value (points above average on neutral field — these are large numbers like 28.7 for Ohio State)
-- conf: conference name (SEC, Big Ten, ACC, Big 12, Ind, etc.)
-- hfa: home field advantage in points (SEC teams = 4.0, Big Ten = 3.5, others = 3.0, small stadiums = 2.5)
-- dome: boolean
+    const searchPrompt = `Search for the current ESPN College Football FPI rankings for 2026. Find the full list of top FBS teams with their FPI values.`;
 
-Return ONLY the JSON array. No markdown, no explanation, no backticks.`;
+    const formatPrompt = `Convert this college football FPI data into a JSON array of the top 40 teams.
+Return ONLY the raw JSON array with no other text, no markdown, no explanation.
+Each item must have: rank (integer), name (full school name), abbr (2-5 char abbreviation), fpiPts (actual ESPN FPI value — these are large numbers like 28.7 for Ohio State, NOT rank numbers), conf (conference name), hfa (home field advantage: SEC=4.0, Big Ten=3.5, others=3.0), dome (boolean).
+Start your response with [ and end with ].`;
 
     try {
-      const res = await fetch("/api/claude", {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({
-          _useWebSearch: true,
-          model:"claude-sonnet-4-6", max_tokens:2500,
-          tools:[{ type:"web_search_20250305", name:"web_search" }],
-          messages:[{ role:"user", content:prompt }]
-        })
-      });
-      const data = await res.json();
-      const text = data.content?.filter(b=>b.type==="text").map(b=>b.text).join("") || "";
-      const start = text.indexOf("["), end = text.lastIndexOf("]");
-      if (start===-1||end===-1) throw new Error("No JSON array");
-      const parsed = JSON.parse(text.slice(start, end+1));
-      if (!Array.isArray(parsed)||parsed.length<20) throw new Error("Incomplete");
+      const text = await fetchWithSearch(searchPrompt, formatPrompt);
+      const parsed = extractJSON(text);
+      if (!Array.isArray(parsed) || parsed.length < 20) throw new Error("Only got " + parsed.length + " teams");
       setFpiData(parsed);
       setFpiDesc(`ESPN FPI — fetched ${today}`);
       setFpiStatus("done");
     } catch(e) {
-      console.error("CFB FPI fetch error:", e);
+      console.error("CFB FPI fetch error:", e.message);
       setFpiStatus("error");
     }
   }, []);
@@ -320,41 +304,23 @@ Return ONLY the JSON array. No markdown, no explanation, no backticks.`;
   const fetchDK = useCallback(async () => {
     setDkStatus("loading");
     const today = new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"});
-    const prompt = `Today is ${today}. Search the web for college football Week ${weekNum} 2026 DraftKings spread and total lines. Check espn.com/college-football/odds, covers.com, or sportsbook.draftkings.com.
 
-Return ONLY a valid JSON array of the major games this week (focus on top 40 FBS matchups with lines). Each object must have exactly:
-- away: team abbreviation (short, 2-5 chars matching the FPI data abbreviations)
-- home: team abbreviation
-- dkSpread: number from HOME perspective (negative = home favored)
-- dkTotal: over/under number
-- gameTime: short string like "Sat Sep 5 · 3:30 PM"
-- network: TV network
-- neutral: boolean
-- notes: brief note or empty string
+    const searchPrompt = `Search for college football Week ${weekNum} 2026 point spreads and totals. Find DraftKings or any sportsbook lines for major games this week.`;
 
-Return ONLY the JSON array. No markdown, no explanation, no backticks.`;
+    const formatPrompt = `Convert this college football Week ${weekNum} betting lines into a JSON array of games.
+Return ONLY the raw JSON array with no other text, no markdown, no explanation.
+Each item must have: away (team abbr), home (team abbr), dkSpread (number, home perspective: negative = home favored), dkTotal (number), gameTime (string like "Sat Sep 5 · 3:30 PM"), network (string), neutral (boolean), notes (string).
+Focus on top 25 matchups and major conference games. Start your response with [ and end with ].`;
 
     try {
-      const res = await fetch("/api/claude", {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({
-          _useWebSearch: true,
-          model:"claude-sonnet-4-6", max_tokens:2500,
-          tools:[{ type:"web_search_20250305", name:"web_search" }],
-          messages:[{ role:"user", content:prompt }]
-        })
-      });
-      const data = await res.json();
-      const text = data.content?.filter(b=>b.type==="text").map(b=>b.text).join("") || "";
-      const start = text.indexOf("["), end = text.lastIndexOf("]");
-      if (start===-1||end===-1) throw new Error("No JSON array");
-      const parsed = JSON.parse(text.slice(start, end+1));
-      if (!Array.isArray(parsed)||parsed.length<5) throw new Error("Incomplete");
+      const text = await fetchWithSearch(searchPrompt, formatPrompt);
+      const parsed = extractJSON(text);
+      if (!Array.isArray(parsed) || parsed.length < 5) throw new Error("Only got " + parsed.length + " games");
       setGames(parsed);
       setDkDesc(`DraftKings Week ${weekNum} — fetched ${today}`);
       setDkStatus("done");
     } catch(e) {
-      console.error("CFB DK fetch error:", e);
+      console.error("CFB DK fetch error:", e.message);
       setDkStatus("error");
     }
   }, [weekNum]);
@@ -402,15 +368,11 @@ Be direct and reference the actual adjusted edge numbers.`;
     const msg = `NCAAF Week ${weekNum} 2026:\n\n${rows}\n\nBest bets: ${bestPlays.length} | Edge plays: ${edgePlays.length} | Fade zone (14+): ${fadeZone.length}\n\nTop 2 adjusted-edge plays, best wide-spread fade, one game to avoid, unit note.`;
 
     try {
-      const res = await fetch("/api/claude", {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ model:"claude-sonnet-4-6", max_tokens:1000, system:sys, messages:[{role:"user",content:msg}] })
-      });
-      const data = await res.json();
-      const text = data.content?.map(b=>b.text||"").join("")||"No response.";
+      const data = await callClaude({ model:"claude-sonnet-4-6", max_tokens:1000, system:sys, messages:[{role:"user",content:msg}] });
+      const text = extractText(data) || "No response.";
       setAiOutput(text);
       setChatHist([{role:"user",content:msg},{role:"assistant",content:text}]);
-    } catch { setAiOutput("Could not reach AI."); }
+    } catch(e) { setAiOutput("Could not reach AI: " + e.message); }
     setAiLoading(false);
   }, [computed, teamMap, bestPlays.length, edgePlays.length, fadeZone.length, weekNum]);
 
@@ -420,14 +382,12 @@ Be direct and reference the actual adjusted edge numbers.`;
     const ctx=computed.map(g=>`${g.away}@${g.home}:adj${g.adjEdge>=0?"+":""}${g.adjEdge.toFixed(1)},${g.rec.verdict}`).join("|");
     const msgs=[...chatHist,{role:"user",content:`${ctx}\n\n${q}`}];
     try {
-      const res=await fetch("/api/claude",{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:600,
-          system:"Sharp NCAAF analyst. Spread penalty system. Direct and specific.",messages:msgs})});
-      const data=await res.json();
-      const text=data.content?.map(b=>b.text||"").join("")||"";
+      const data = await callClaude({model:"claude-sonnet-4-6",max_tokens:600,
+        system:"Sharp NCAAF analyst. Spread penalty system. Direct and specific.",messages:msgs});
+      const text = extractText(data) || "";
       setAiOutput(p=>`${p}\n\n━━━━\nYou: ${q}\n\n${text}`);
       setChatHist([...msgs,{role:"assistant",content:text}]);
-    } catch { setAiOutput(p=>p+"\n\nError."); }
+    } catch(e) { setAiOutput(p=>p+"\n\nError: " + e.message); }
     setAiLoading(false);
   }, [question,chatHist,computed]);
 

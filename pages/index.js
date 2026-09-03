@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import Link from "next/link";
 import { buildTeamMap, calcSpread, getEdge, getNFLRec, parseFPICSV, parseDKCSV } from "../lib/engine";
 import { S, btn } from "../lib/components";
+import { callClaude, extractText, extractJSON, fetchWithSearch } from "../lib/fetcher";
 
 // ─── DEFAULT NFL DATA ─────────────────────────────────────────────────────────
 const DEFAULT_FPI = [
@@ -235,40 +236,23 @@ export default function NFLEdge() {
   const fetchFPI = useCallback(async () => {
     setFpiStatus("loading");
     const today = new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"});
-    const prompt = `Today is ${today}. Search the web for the current ESPN NFL Football Power Index (FPI) rankings for the 2026 NFL season. Check espn.com/nfl/fpi and sports news sites reporting on the rankings.
 
-Return ONLY a valid JSON array of all 32 NFL teams. Each object must have exactly:
-- rank: integer 1-32
-- name: full team name
-- abbr: use ONLY these abbreviations: LAR,BUF,BAL,SEA,SF,GB,LAC,DET,KC,PHI,DAL,CIN,HOU,NE,DEN,CHI,JAC,TB,MIN,IND,WSH,PIT,NYG,NO,ATL,TEN,CAR,LV,ARI,CLE,NYJ,MIA
-- fpiPts: convert rank to power rating (rank 1 = +9.0, rank 32 = -8.4, linear ~0.55 pts per step)
-- conf: "NFC" or "AFC"
-- dome: boolean
-- hfa: home field pts (SEA=3.0, BAL/GB/KC/NO/PIT=2.5, LAC/DAL/NE/CAR/NYG/NYJ/MIA=1.5, rest=2.0)
+    const searchPrompt = `Search for the current ESPN NFL FPI power rankings for 2026. Find the full ranked list of all 32 NFL teams with their FPI values.`;
 
-Return ONLY the JSON array. No markdown, no explanation, no backticks.`;
+    const formatPrompt = `Convert this NFL FPI ranking data into a JSON array of exactly 32 teams.
+Return ONLY the raw JSON array with no other text, no markdown, no explanation.
+Each item must have: rank (1-32), name (full team name), abbr (use: LAR,BUF,BAL,SEA,SF,GB,LAC,DET,KC,PHI,DAL,CIN,HOU,NE,DEN,CHI,JAC,TB,MIN,IND,WSH,PIT,NYG,NO,ATL,TEN,CAR,LV,ARI,CLE,NYJ,MIA), fpiPts (rank 1=9.0 down to rank 32=-8.4 in linear steps), conf ("NFC" or "AFC"), dome (boolean), hfa (SEA=3.0, BAL/GB/KC/NO/PIT=2.5, LAC/DAL/NE/CAR/NYG/NYJ/MIA=1.5, rest=2.0).
+Start your response with [ and end with ].`;
 
     try {
-      const res = await fetch("/api/claude", {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({
-          _useWebSearch: true,
-          model:"claude-sonnet-4-6", max_tokens:2000,
-          tools:[{ type:"web_search_20250305", name:"web_search" }],
-          messages:[{ role:"user", content:prompt }]
-        })
-      });
-      const data = await res.json();
-      const text = data.content?.filter(b=>b.type==="text").map(b=>b.text).join("") || "";
-      const start = text.indexOf("["), end = text.lastIndexOf("]");
-      if (start === -1 || end === -1) throw new Error("No JSON array in response");
-      const parsed = JSON.parse(text.slice(start, end+1));
-      if (!Array.isArray(parsed) || parsed.length < 30) throw new Error("Incomplete data");
+      const text = await fetchWithSearch(searchPrompt, formatPrompt);
+      const parsed = extractJSON(text);
+      if (!Array.isArray(parsed) || parsed.length < 30) throw new Error("Only got " + parsed.length + " teams");
       setFpiData(parsed);
       setFpiDesc(`ESPN FPI — fetched ${today}`);
       setFpiStatus("done");
     } catch(e) {
-      console.error("FPI fetch error:", e);
+      console.error("NFL FPI fetch error:", e.message);
       setFpiStatus("error");
     }
   }, []);
@@ -277,41 +261,24 @@ Return ONLY the JSON array. No markdown, no explanation, no backticks.`;
   const fetchDK = useCallback(async () => {
     setDkStatus("loading");
     const today = new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"});
-    const prompt = `Today is ${today}. Search the web for NFL Week ${weekNum} 2026 DraftKings spread and total lines. Check espn.com/nfl/odds, covers.com, or sportsbook.draftkings.com.
 
-Return ONLY a valid JSON array of all games this week. Each object must have exactly:
-- away: team abbreviation (use: LAR,BUF,BAL,SEA,SF,GB,LAC,DET,KC,PHI,DAL,CIN,HOU,NE,DEN,CHI,JAC,TB,MIN,IND,WSH,PIT,NYG,NO,ATL,TEN,CAR,LV,ARI,CLE,NYJ,MIA)
-- home: team abbreviation
-- dkSpread: number from HOME perspective (negative = home favored, e.g. -3.5 means home favored by 3.5)
-- dkTotal: over/under number
-- gameTime: short string like "Sun Sep 13 · 1:00 PM"
-- network: TV network
-- neutral: boolean
-- notes: brief note or empty string
+    const searchPrompt = `Search for NFL Week ${weekNum} 2026 point spreads and totals. Find the DraftKings or any sportsbook lines for all games this week.`;
 
-Return ONLY the JSON array. No markdown, no explanation, no backticks.`;
+    const formatPrompt = `Convert this NFL Week ${weekNum} betting lines data into a JSON array of all games.
+Return ONLY the raw JSON array with no other text, no markdown, no explanation.
+Each item must have: away (team abbr), home (team abbr), dkSpread (number, home perspective: negative = home favored), dkTotal (number), gameTime (string like "Sun Sep 13 · 1:00 PM"), network (string), neutral (boolean), notes (string).
+Use these abbreviations: LAR,BUF,BAL,SEA,SF,GB,LAC,DET,KC,PHI,DAL,CIN,HOU,NE,DEN,CHI,JAC,TB,MIN,IND,WSH,PIT,NYG,NO,ATL,TEN,CAR,LV,ARI,CLE,NYJ,MIA.
+Start your response with [ and end with ].`;
 
     try {
-      const res = await fetch("/api/claude", {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({
-          _useWebSearch: true,
-          model:"claude-sonnet-4-6", max_tokens:2000,
-          tools:[{ type:"web_search_20250305", name:"web_search" }],
-          messages:[{ role:"user", content:prompt }]
-        })
-      });
-      const data = await res.json();
-      const text = data.content?.filter(b=>b.type==="text").map(b=>b.text).join("") || "";
-      const start = text.indexOf("["), end = text.lastIndexOf("]");
-      if (start === -1 || end === -1) throw new Error("No JSON array in response");
-      const parsed = JSON.parse(text.slice(start, end+1));
-      if (!Array.isArray(parsed) || parsed.length < 8) throw new Error("Incomplete data");
+      const text = await fetchWithSearch(searchPrompt, formatPrompt);
+      const parsed = extractJSON(text);
+      if (!Array.isArray(parsed) || parsed.length < 8) throw new Error("Only got " + parsed.length + " games");
       setGames(parsed);
       setDkDesc(`DraftKings Week ${weekNum} — fetched ${today}`);
       setDkStatus("done");
     } catch(e) {
-      console.error("DK fetch error:", e);
+      console.error("NFL DK fetch error:", e.message);
       setDkStatus("error");
     }
   }, [weekNum]);
@@ -346,15 +313,11 @@ Return ONLY the JSON array. No markdown, no explanation, no backticks.`;
     const msg = `NFL Week ${weekNum} 2026:\n\n${rows}\n\nBest bets: ${bestPlays.length} | Edge plays: ${edgePlays.length}\n\nTop 2 plays with reasoning, one fade, unit-sizing note.`;
 
     try {
-      const res = await fetch("/api/claude", {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ model:"claude-sonnet-4-6", max_tokens:900, system:sys, messages:[{role:"user",content:msg}] })
-      });
-      const data = await res.json();
-      const text = data.content?.map(b=>b.text||"").join("") || "No response.";
+      const data = await callClaude({ model:"claude-sonnet-4-6", max_tokens:900, system:sys, messages:[{role:"user",content:msg}] });
+      const text = extractText(data) || "No response.";
       setAiOutput(text);
       setChatHist([{role:"user",content:msg},{role:"assistant",content:text}]);
-    } catch { setAiOutput("Could not reach AI."); }
+    } catch(e) { setAiOutput("Could not reach AI: " + e.message); }
     setAiLoading(false);
   }, [computed, teamMap, bestPlays.length, edgePlays.length, weekNum]);
 
@@ -364,16 +327,12 @@ Return ONLY the JSON array. No markdown, no explanation, no backticks.`;
     const ctx = computed.map(g=>`${g.away}@${g.home}:${g.edge>=0?"+":""}${g.edge.toFixed(1)}`).join("|");
     const msgs = [...chatHist, {role:"user",content:`${ctx}\n\n${q}`}];
     try {
-      const res = await fetch("/api/claude", {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ model:"claude-sonnet-4-6", max_tokens:600,
-          system:"Sharp NFL analyst. Power ratings. Direct and specific.", messages:msgs })
-      });
-      const data = await res.json();
-      const text = data.content?.map(b=>b.text||"").join("") || "";
+      const data = await callClaude({ model:"claude-sonnet-4-6", max_tokens:600,
+        system:"Sharp NFL analyst. Power ratings. Direct and specific.", messages:msgs });
+      const text = extractText(data) || "";
       setAiOutput(p => `${p}\n\n━━━━\nYou: ${q}\n\n${text}`);
       setChatHist([...msgs, {role:"assistant",content:text}]);
-    } catch { setAiOutput(p => p+"\n\nError."); }
+    } catch(e) { setAiOutput(p => p+"\n\nError: " + e.message); }
     setAiLoading(false);
   }, [question, chatHist, computed]);
 
