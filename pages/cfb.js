@@ -284,7 +284,8 @@ export default function CFBEdge() {
 
     const formatPrompt = `Convert this college football FPI data into a JSON array of the top 40 teams.
 Return ONLY the raw JSON array with no other text, no markdown, no explanation.
-Each item must have: rank (integer), name (full school name), abbr (2-5 char abbreviation), fpiPts (actual ESPN FPI value — these are large numbers like 28.7 for Ohio State, NOT rank numbers), conf (conference name), hfa (home field advantage: SEC=4.0, Big Ten=3.5, others=3.0), dome (boolean).
+CRITICAL: fpiPts must be the RAW ESPN FPI value (e.g. Ohio State ~28.7, Texas ~25, Georgia ~20). Do NOT convert ranks to points. Do NOT add home field. Use the actual FPI number from ESPN exactly as shown.
+Each item must have: rank (integer), name (full school name), abbr (2-5 char abbreviation like OSU/TEX/UGA/ND), fpiPts (raw ESPN FPI number, positive for good teams, can be negative for weak teams), conf (conference), hfa (SEC=4.0, Big Ten=3.5, ACC/Big12=3.0, others=2.5), dome (boolean).
 Start your response with [ and end with ].`;
 
     try {
