@@ -306,11 +306,11 @@ Start your response with [ and end with ].`;
       const h=teamMap[g.home], a=teamMap[g.away]; if(!h||!a) return "";
       const pL = g.proj>=0?`${h.abbr}-${Math.abs(g.proj)}`:`${a.abbr}-${Math.abs(g.proj)}`;
       const dL = g.dkSpread<=0?`${h.abbr}-${Math.abs(g.dkSpread)}`:`${a.abbr}-${Math.abs(g.dkSpread)}`;
-      return `${a.abbr}(#${a.rank})@${h.abbr}(#${h.rank})|Proj:${pL}|DK:${dL}|Edge:${g.edge>=0?"+":""}${g.edge.toFixed(1)}|${g.rec.verdict}(${g.rec.units}u)`;
+      return `${a.abbr}(#${a.rank})@${h.abbr}(#${h.rank})|Proj:${pL}|DK:${dL}|Edge:${g.edge>=0?"+":""}${g.edge.toFixed(1)}|${g.rec.verdict}`;
     }).filter(Boolean).join("\n");
 
-    const sys = `Sharp NFL betting analyst. Power rating methodology: team FPI values, edge = proj spread minus book line, bet when edge ≥ 2.5 pts, HFA 2.0-2.5 pts, QB injuries = 7 pts, never exceed 3% bankroll. Direct and specific.`;
-    const msg = `NFL Week ${weekNum} 2026:\n\n${rows}\n\nBest bets: ${bestPlays.length} | Edge plays: ${edgePlays.length}\n\nTop 2 plays with reasoning, one fade, unit-sizing note.`;
+    const sys = `Sharp NFL analyst. Power rating methodology: team FPI values, edge = proj spread minus book line, signal threshold ≥ 2.5 pts, HFA 2.0-2.5 pts, QB injuries = 7 pts. For informational purposes only. Direct and specific.`;
+    const msg = `NFL Week ${weekNum} 2026:\n\n${rows}\n\nBest signals: ${bestPlays.length} | Edge plays: ${edgePlays.length}\n\nTop 2 plays with reasoning and one fade. Information only — no wagering advice.`;
 
     try {
       const data = await callClaude({ model:"claude-sonnet-4-6", max_tokens:900, system:sys, messages:[{role:"user",content:msg}] });
@@ -339,14 +339,14 @@ Start your response with [ and end with ].`;
   const exportPicks = () => {
     const lines = [`THE EDGE — NFL WEEK ${weekNum} 2026`, "=".repeat(50),
       `Bankroll: $${bankroll.toLocaleString()}`,
-      `Best bets: ${bestPlays.length} | Edge plays: ${edgePlays.length} | Exposure: $${totalExp.toLocaleString()} (${totalUnits}u)`,
+      `Signals: ${bestPlays.length} best | ${edgePlays.length} edge plays`,
       `FPI: ${fpiDesc}`, `Lines: ${dkDesc}`, ""];
     computed.forEach(g => {
       const h=teamMap[g.home],a=teamMap[g.away]; if(!h||!a) return;
       const bet = bankroll>0?Math.round(bankroll*g.rec.pct/100):0;
       lines.push(`${a.abbr} @ ${h.abbr}  ${g.gameTime}`);
       lines.push(`  ${g.proj>=0?h.abbr+" -"+Math.abs(g.proj):a.abbr+" -"+Math.abs(g.proj)} proj | ${g.dkSpread<=0?h.abbr+" -"+Math.abs(g.dkSpread):a.abbr+" -"+Math.abs(g.dkSpread)} DK | ${g.edge>=0?"+":""}${g.edge.toFixed(1)} edge`);
-      lines.push(`  → ${g.rec.verdict} (${g.rec.units}u)${bet>0?" — $"+bet.toLocaleString():""}`);
+      lines.push(`  → ${g.rec.verdict}`);
       if(g.notes) lines.push(`  ${g.notes}`);
       lines.push("");
     });
