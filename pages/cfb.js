@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { buildTeamMap, calcSpread, getEdge, getCFBRec, getSpreadPenalty, getAdjustedEdge, parseFPICSV, parseDKCSV } from "../lib/engine";
 import { S, btn } from "../lib/components";
@@ -253,19 +253,21 @@ function GameCard({ game, teamMap, injAdj, bankroll, weekNum }) {
           dkSpread={game.dkSpread} awayAbbr={a.abbr} homeAbbr={h.abbr} />
         {rec.tier >= 1 && (
           <div style={{ textAlign:"right", marginTop:6 }}>
-            <button onClick={() => {
-              const pick = buildPickObj(game, h, a, adjEdge, rec, proj, weekNum);
-              try {
-                const ex = JSON.parse(localStorage.getItem("edgeBriefExport") || "{}");
-                const ps = Array.isArray(ex.picks) ? ex.picks : [];
-                if (!ps.find(p => p.matchup === pick.matchup)) ps.push(pick);
-                localStorage.setItem("edgeBriefExport", JSON.stringify({ league:"NCAAF", weekNum, picks:ps }));
-              } catch(e) {}
-              window.open("/brief", "_blank");
-            }} style={{ fontSize:10, color:S.green, background:"transparent",
-              border:`1px solid ${S.green}40`, borderRadius:4, padding:"2px 9px", cursor:"pointer" }}>
+            <a href="/brief" target="_blank" rel="noreferrer"
+              onClick={() => {
+                const pick = buildPickObj(game, h, a, adjEdge, rec, proj, weekNum);
+                try {
+                  const ex = JSON.parse(localStorage.getItem("edgeBriefExport") || "{}");
+                  const ps = Array.isArray(ex.picks) ? ex.picks : [];
+                  if (!ps.find(p => p.matchup === pick.matchup)) ps.push(pick);
+                  localStorage.setItem("edgeBriefExport", JSON.stringify({ league:"NCAAF", weekNum, picks:ps }));
+                } catch(e) {}
+              }}
+              style={{ fontSize:10, color:S.green, background:"transparent",
+                border:`1px solid ${S.green}40`, borderRadius:4, padding:"2px 9px",
+                cursor:"pointer", textDecoration:"none", display:"inline-block" }}>
               → Send to Brief
-            </button>
+            </a>
           </div>
         )}
       </div>
@@ -302,10 +304,13 @@ export default function CFBEdge() {
   const [injAdj,    setInjAdj]    = useState({});
   const [showInj,   setShowInj]   = useState(false);
   const [showStats, setShowStats] = useState(false);
-  const [aiOutput,  setAiOutput]  = useState("");
+  const [aiOutput,  setAiOutput]  = useState(() => { try { return sessionStorage.getItem("edgeAI_cfb") || ""; } catch(e) { return ""; } });
   const [aiLoading, setAiLoading] = useState(false);
   const [chatHist,  setChatHist]  = useState([]);
   const [question,  setQuestion]  = useState("");
+
+  // Persist AI output across navigation
+  useEffect(() => { try { if (aiOutput) sessionStorage.setItem("edgeAI_cfb", aiOutput); else sessionStorage.removeItem("edgeAI_cfb"); } catch(e) {} }, [aiOutput]);
 
   const teamMap  = buildTeamMap(fpiData);
   const allTeams = [...new Set(games.flatMap(g => [g.home, g.away]))].sort();
@@ -435,7 +440,9 @@ Be direct and reference the actual adjusted edge numbers.`;
       return buildPickObj(g, h, a, g.adjEdge, g.rec, g.proj, weekNum);
     }).filter(Boolean);
     try { localStorage.setItem("edgeBriefExport", JSON.stringify({ league:"NCAAF", weekNum, picks })); } catch(e) {}
-    window.open("/brief", "_blank");
+    const a = document.createElement("a");
+    a.href = "/brief"; a.target = "_blank"; a.rel = "noreferrer";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
   }, [bestPlays, teamMap, weekNum]);
 
   const exportPicks = () => {
