@@ -150,7 +150,26 @@ function VerdictBanner({ rec, betAmt, adjEdge, rawEdge, dkSpread, awayAbbr, home
 }
 
 // ─── GAME CARD ────────────────────────────────────────────────────────────────
-function GameCard({ game, teamMap, injAdj, bankroll }) {
+function buildPickObj(game, h, a, edgeVal, rec, proj, weekNum) {
+  const confMap = { 0:"Pass", 1:"Lean", 2:"Standard", 3:"High" };
+  const pickTxt = edgeVal >= 0
+    ? (game.dkSpread <= 0 ? `${h.abbr} -${Math.abs(game.dkSpread)}` : `${h.abbr} +${game.dkSpread}`)
+    : (game.dkSpread > 0  ? `${a.abbr} -${game.dkSpread}` : `${a.abbr} +${Math.abs(game.dkSpread)}`);
+  const pLbl = proj >= 0 ? `${h.abbr} -${Math.abs(proj).toFixed(1)}` : `${a.abbr} -${Math.abs(proj).toFixed(1)}`;
+  return {
+    matchup: `${a.abbr} @ ${h.abbr}`,
+    pick:    pickTxt,
+    line:    game.dkSpread <= 0 ? `${h.abbr} -${Math.abs(game.dkSpread)}` : `${a.abbr} -${game.dkSpread}`,
+    power:   pLbl,
+    edge:    `${edgeVal >= 0 ? "+" : ""}${edgeVal.toFixed(1)}`,
+    time:    game.gameTime,
+    conf:    confMap[Math.min(rec.tier, 3)] || "Standard",
+    thesis:  "",
+    flags:   ""
+  };
+}
+
+function GameCard({ game, teamMap, injAdj, bankroll, weekNum }) {
   const h = teamMap[game.home], a = teamMap[game.away];
   if (!h || !a) return (
     <div style={{ background:S.cardBg, border:`1px solid ${S.cardBorder}`, borderRadius:10,
@@ -232,6 +251,23 @@ function GameCard({ game, teamMap, injAdj, bankroll }) {
       <div style={{ padding:"0 14px 12px" }}>
         <VerdictBanner rec={rec} betAmt={betAmt} adjEdge={adjEdge} rawEdge={rawEdge}
           dkSpread={game.dkSpread} awayAbbr={a.abbr} homeAbbr={h.abbr} />
+        {rec.tier >= 1 && (
+          <div style={{ textAlign:"right", marginTop:6 }}>
+            <button onClick={() => {
+              const pick = buildPickObj(game, h, a, adjEdge, rec, proj, weekNum);
+              try {
+                const ex = JSON.parse(localStorage.getItem("edgeBriefExport") || "{}");
+                const ps = Array.isArray(ex.picks) ? ex.picks : [];
+                if (!ps.find(p => p.matchup === pick.matchup)) ps.push(pick);
+                localStorage.setItem("edgeBriefExport", JSON.stringify({ league:"NCAAF", weekNum, picks:ps }));
+              } catch(e) {}
+              window.open("/brief", "_blank");
+            }} style={{ fontSize:10, color:S.green, background:"transparent",
+              border:`1px solid ${S.green}40`, borderRadius:4, padding:"2px 9px", cursor:"pointer" }}>
+              → Send to Brief
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -391,6 +427,16 @@ Be direct and reference the actual adjusted edge numbers.`;
     } catch(e) { setAiOutput(p=>p+"\n\nError: " + e.message); }
     setAiLoading(false);
   }, [question,chatHist,computed]);
+
+  const exportAllBestPlays = useCallback(() => {
+    const picks = bestPlays.map(g => {
+      const h = teamMap[g.home], a = teamMap[g.away];
+      if (!h || !a) return null;
+      return buildPickObj(g, h, a, g.adjEdge, g.rec, g.proj, weekNum);
+    }).filter(Boolean);
+    try { localStorage.setItem("edgeBriefExport", JSON.stringify({ league:"NCAAF", weekNum, picks })); } catch(e) {}
+    window.open("/brief", "_blank");
+  }, [bestPlays, teamMap, weekNum]);
 
   const exportPicks = () => {
     const lines=[`THE EDGE — NCAAF WEEK ${weekNum} 2026`,"=".repeat(55),
@@ -556,6 +602,7 @@ Be direct and reference the actual adjusted edge numbers.`;
           <button onClick={()=>setShowInj(s=>!s)} style={btn(false)}>{showInj?"Hide":"Edit"} injuries</button>
           <button onClick={runAI} disabled={aiLoading} style={btn(true,false,aiLoading)}>{aiLoading?"Analyzing…":"⚡ AI Handicapper"}</button>
           <button onClick={exportPicks} style={btn(false)}>↓ Export</button>
+          <button onClick={exportAllBestPlays} disabled={bestPlays.length===0} style={btn(true,false,bestPlays.length===0)}>→ Brief{bestPlays.length>0?` (${bestPlays.length})`:""}</button>
         </div>
 
         {/* VERDICT KEY */}
@@ -619,7 +666,7 @@ Be direct and reference the actual adjusted edge numbers.`;
           color:S.textMuted, fontWeight:700, marginBottom:10 }}>
           Week {weekNum} · {filtered.length}/{games.length} games
         </div>
-        {filtered.map((g,i)=><GameCard key={i} game={g} teamMap={teamMap} injAdj={injAdj} bankroll={bankroll}/>)}
+        {filtered.map((g,i)=><GameCard key={i} game={g} teamMap={teamMap} injAdj={injAdj} bankroll={bankroll} weekNum={weekNum}/>)}
         {filtered.length===0&&(
           <div style={{ padding:"2rem", textAlign:"center", color:S.textSecondary,
             fontSize:13, background:S.cardBg, borderRadius:8, border:`1px solid ${S.cardBorder}` }}>
