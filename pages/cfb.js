@@ -351,7 +351,7 @@ Focus on top 25 matchups and major conference games. Start your response with [ 
       const h=teamMap[g.home],a=teamMap[g.away]; if(!h||!a) return "";
       const pL=g.proj>=0?`${h.abbr}-${Math.abs(g.proj)}`:`${a.abbr}-${Math.abs(g.proj)}`;
       const dL=g.dkSpread<=0?`${h.abbr}-${Math.abs(g.dkSpread)}`:`${a.abbr}-${Math.abs(g.dkSpread)}`;
-      return `${a.abbr}(#${a.rank},${a.conf})@${h.abbr}(#${h.rank},${h.conf})|Proj:${pL}|DK:${dL}|Raw:${g.rawEdge>=0?"+":""}${g.rawEdge.toFixed(1)}|Pen:${getSpreadPenalty(g.dkSpread)}|Adj:${g.adjEdge>=0?"+":""}${g.adjEdge.toFixed(1)}|${g.rec.verdict}`;
+      return `${a.abbr}(#${a.rank},${a.conf})@${h.abbr}(#${h.rank},${h.conf})|Proj:${pL}|DK:${dL}|Raw:${g.rawEdge>=0?"+":""}${g.rawEdge.toFixed(1)}|Pen:${getSpreadPenalty(g.dkSpread)}|Adj:${g.adjEdge>=0?"+":""}${g.adjEdge.toFixed(1)}|${g.rec.verdict}(${g.rec.units}u)`;
     }).filter(Boolean).join("\n");
 
     const sys = `Sharp college football analyst. Key methodology:
@@ -363,10 +363,10 @@ Focus on top 25 matchups and major conference games. Start your response with [ 
   28+ pt favorites: cover only ~40% → -4.0 pt penalty applied
   "Ranked Team Tax": books inflate spreads 1-2.5 pts for ranked teams
   Oregon 2024: 13-1 SU but 7-7 ATS — failed to cover 5 spreads of 14.5+
-- Signal threshold: adjusted edge ≥ 3.0 pts.
-For informational purposes only. Be direct and reference the actual adjusted edge numbers.`;
+- Bet when adjusted edge ≥ 3.0 pts. Unit sizing: 1-3% bankroll.
+Be direct and reference the actual adjusted edge numbers.`;
 
-    const msg = `NCAAF Week ${weekNum} 2026:\n\n${rows}\n\nBest signals: ${bestPlays.length} | Edge plays: ${edgePlays.length} | Fade zone (14+): ${fadeZone.length}\n\nTop 2 adjusted-edge plays, best wide-spread fade, one game to avoid. Information only — no wagering advice.`;
+    const msg = `NCAAF Week ${weekNum} 2026:\n\n${rows}\n\nBest bets: ${bestPlays.length} | Edge plays: ${edgePlays.length} | Fade zone (14+): ${fadeZone.length}\n\nTop 2 adjusted-edge plays, best wide-spread fade, one game to avoid, unit note.`;
 
     try {
       const data = await callClaude({ model:"claude-sonnet-4-6", max_tokens:1000, system:sys, messages:[{role:"user",content:msg}] });
